@@ -1,0 +1,10 @@
+# Ignore everything under template/
+template/*
+
+# Except the build folder under template/
+!template/build
+!template/build/*
+
+# Ignore the src, static folder under template/
+template/src
+template/static

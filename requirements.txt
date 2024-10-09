@@ -1,0 +1,10 @@
+Flask==3.0.3
+gunicorn==22.0.0
+Werkzeug==3.0.3
+flask-socketio==5.4.1
+numpy
+scipy
+joblib
+gevent
+scikit-learn
+pandas

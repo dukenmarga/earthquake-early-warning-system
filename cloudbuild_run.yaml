@@ -1,0 +1,6 @@
+steps:
+  - name: "gcr.io/cloud-builders/docker"
+    args: [ "build", "-t", "gcr.io/nutmeg-435109/earthquake-warning-system", ".", "-f", "Dockerfile" ]
+
+  - name: "gcr.io/cloud-builders/docker"
+    args: [ "push", "gcr.io/nutmeg-435109/earthquake-warning-system" ]
