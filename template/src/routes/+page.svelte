@@ -53,10 +53,10 @@
 		content = "<div style='color:grey'><strong>No earthquake detected so far!</strong>";
 		disabled = true;
 		const p5 = (await import('p5')).default; // Dynamically import P5.js
-		// let socket = io('https://earthquake-warning-system-1014455894118.asia-southeast2.run.app/', {});
-		socket = io('http://0.0.0.0:8080/', {
-			reconnection: false
-		});
+		socket = io('https://earthquake-warning-system-1014455894118.asia-southeast2.run.app/', {});
+		// socket = io('http://0.0.0.0:8080/', {
+		// 	reconnection: false
+		// });
 
 		// Stream data to the server every 0.01 seconds
 		let waveSample: number = 0;
