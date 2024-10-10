@@ -8,12 +8,9 @@ def predict_earthquake_wave(pga: float, naturalfreq: int) -> tuple[str, str]:
     model = joblib.load(model_path)
 
     classification = {
-        0: "<div class='text-green-500'>Minor Earthquake. Stay in place!</div>",
-        1: "<div class='text-green-500'>Moderate/Severe Earthquake. Evacuate immediately!</div>",
+        0: "<div style='color:green'><strong>Minor Earthquake. Stay in place!</strong></div>",
+        1: "<div style='color:red'><strong>Moderate/Severe Earthquake. Evacuate immediately!</strong></div>",
     }
-
-    # features = np.array([pga, naturalfreq]).reshape(1, -1)
-    # features_df = pd.DataFrame(features, columns=["PGA", "NaturalFreq"])
 
     features_df = pd.DataFrame(
         np.array([[pga, naturalfreq]]), columns=["PGA", "NaturalFreq"]
@@ -25,6 +22,6 @@ def predict_earthquake_wave(pga: float, naturalfreq: int) -> tuple[str, str]:
 
     # Print the predicted class
     return (
-        f"<strong>{classification[predicted_number]}</strong>",
-        f"<strong>{0}%</strong><br>",
+        f"{classification[predicted_number]}",
+        f"{0}%",
     )

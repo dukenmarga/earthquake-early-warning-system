@@ -48,7 +48,6 @@ def handle_seismic_wave(data: dict[str, int | float]):
     Expected data format: {'wave_sample': value, 'sampling_rate': 100}
     """
     try:
-        print("Handled data:", data)
         # Extract data from the incoming message
         wave_sample = data["wave_sample"]
         data_buffer.append(wave_sample)
@@ -67,7 +66,7 @@ def handle_seismic_wave(data: dict[str, int | float]):
             else:
                 naturalfreq = int(data["building_type"])
                 pga = 0
-                message = "<div class='text-blue-500'>Earthquake Detected. Analysis in progress...</div>"
+                message = "<div style='color:blue'><strong>Earthquake Detected. Analysis in progress...</strong></div>"
                 socketio.emit("seismic_update", response(pga, message))
 
                 # Wait for 3 seconds before processing again
@@ -79,15 +78,6 @@ def handle_seismic_wave(data: dict[str, int | float]):
 
                 # Process the wave data with a custom function (e.g., feature extraction)
                 pga = pga_p_wave(wave_data)
-                print(pga)
-                print(naturalfreq)
-
-                # Example of using the loaded model for inference
-                # Replace this with actual data you want to predict
-                features = np.array([pga, naturalfreq])
-
-                # Send processed data back to the client
-                # socketio.emit("seismic_update", response(pga, message))
 
                 # Predict using the loaded model
                 message, probability = predict_earthquake_wave(pga, naturalfreq)
@@ -97,7 +87,7 @@ def handle_seismic_wave(data: dict[str, int | float]):
 
                 # Clear the buffer to store new incoming data
                 data_buffer.clear()
-                print("Disconnected from server")
+                print("Disconnected from client")
                 disconnect()
                 break
 
@@ -110,6 +100,8 @@ def pga_p_wave(wave_data: NDArray[np.float64]) -> float:
     """
     Example function to extract features from seismic wave data.
     """
+    if len(wave_data) < 100:
+        return 0.0  # Not enough data for P-wave
     pga = np.max(np.abs(wave_data))
     return pga.item()
 
@@ -176,9 +168,3 @@ def p_wave_detected():
 
         # Call the P-wave detection function using STA/LTA
         return detect_p_wave_from_buffer(data_to_process)
-
-    # Schedule the next processing in 0.5 seconds
-    # Timer(0.5, p_wave_detected).start()
-
-
-# Start the periodic processing when the server starts
