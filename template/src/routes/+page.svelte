@@ -235,8 +235,11 @@
 											{buttonText}
 										</Button>
 										<br />
+										<br />
 										<div class="text-muted-foreground text-sm">
-											Please refresh to see new simulation!
+											Note: Please refresh to try another simulation! If the simulation is not
+											working, please reload the page, since it might encounter a problem
+											due to serverless computing environment.
 										</div>
 									</div>
 								</Card.Footer>
