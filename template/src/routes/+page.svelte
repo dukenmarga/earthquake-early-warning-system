@@ -13,6 +13,7 @@
 		earthquakeExample2,
 		earthquakeExample3
 	} from '$lib/earthquake-example/sample';
+	import type { Socket } from 'socket.io';
 
 	let data: number[] = [];
 	const samplingRate: number = 100; // 100 Hz means 100 samples per second
@@ -33,19 +34,29 @@
 		return earthquakeExample3[i];
 	}
 
-	let content: string | undefined = 'No earthquake detected so far!';
+	let content: string | undefined = "<div style='color:grey'><strong>No earthquake detected so far!</strong>";
 	let disabled = false;
 	let buttonText = 'Simulate Earthquake';
 
-	let url = '';
 	let pga: HTMLDivElement;
-	let message: HTMLDivElement;
+	// let socket: Socket<DefaultEventsMap, DefaultEventsMap>
+	let socket: Socket<any, any>
+
+
+	// Disconnect from server after 20 seconds
+	$: if (waveIndex == 20*samplingRate) {
+		socket.disconnect();
+		console.log('Disconnected from server');
+	}
 
 	async function analyseWave() {
-		content = 'No earthquake detected so far!';
+		content = "<div style='color:grey'><strong>No earthquake detected so far!</strong>";
 		disabled = true;
 		const p5 = (await import('p5')).default; // Dynamically import P5.js
-		let socket = io('https://earthquake-warning-system-1014455894118.asia-southeast2.run.app/', {});
+		// let socket = io('https://earthquake-warning-system-1014455894118.asia-southeast2.run.app/', {});
+		socket = io('http://0.0.0.0:8080/', {
+			reconnection: false
+		});
 
 		// Stream data to the server every 0.01 seconds
 		let waveSample: number = 0;
@@ -60,8 +71,6 @@
 			waveIndex++;
 			if (waveIndex >= maxWaveformPoints) {
 				clearInterval(sendWave);
-				socket.disconnect();
-				console.log('Disconnected from server');
 			}
 		}, 10); // 10 milliseconds = 0.01 seconds
 
@@ -79,7 +88,7 @@
 
 			p.setup = () => {
 				waveform.textContent = '';
-				p.createCanvas(800, 200).parent(waveform);
+				p.createCanvas(572, 200).parent(waveform);
 			};
 
 			p.draw = () => {
@@ -185,7 +194,7 @@
 								</Card.Header>
 								<Card.Content class="space-y-2">
 									<div id="pga" bind:this={pga}></div>
-									<div id="message" bind:this={message}>{@html content}</div>
+									<div id="message">{@html content}</div>
 									<div class="space-y-1">
 										<Label for="name">Wave</Label>
 										<div
