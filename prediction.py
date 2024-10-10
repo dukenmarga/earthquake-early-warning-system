@@ -9,8 +9,7 @@ def predict_earthquake_wave(pga: float, naturalfreq: int) -> tuple[str, str]:
 
     classification = {
         0: "<div class='text-green-500'>Minor Earthquake. Stay in place!</div>",
-        1: "<div class='text-green-500'>Moderate Earthquake. Prepare for evacuation!</div>",
-        2: "<div class='text-red-500'>Severe Earthquake. Evacuate immediately!</div>",
+        1: "<div class='text-green-500'>Moderate/Severe Earthquake. Evacuate immediately!</div>",
     }
 
     # features = np.array([pga, naturalfreq]).reshape(1, -1)
