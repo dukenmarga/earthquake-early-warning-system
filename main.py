@@ -100,8 +100,10 @@ def pga_p_wave(wave_data: NDArray[np.float64]) -> float:
     """
     Example function to extract features from seismic wave data.
     """
+    # We purposely raise error to prevent inference.
+    # Hence, the user can refresh the browser and try other simulation.
     if len(wave_data) < 100:
-        return 0.0  # Not enough data for P-wave
+        raise ValueError("Wave data must be at least 100 samples long.")
     pga = np.max(np.abs(wave_data))
     return pga.item()
 
