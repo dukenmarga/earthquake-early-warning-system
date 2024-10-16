@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 
 
+# Open the ML/AI model and make inference
 def predict_earthquake_wave(pga: float, naturalfreq: int) -> tuple[str, str]:
     model_path = "./earthquake_model.joblib"
     model = joblib.load(model_path)
@@ -16,11 +17,7 @@ def predict_earthquake_wave(pga: float, naturalfreq: int) -> tuple[str, str]:
         np.array([[pga, naturalfreq]]), columns=["PGA", "NaturalFreq"]
     )
     predicted_number = model.predict(features_df).item()
-    # print(f"Predicted number: {predicted_number}")
-    # predicted_proba = model.predict_proba(features_df)
-    # print(f"Predicted probability: {predicted_proba}")
 
-    # Print the predicted class
     return (
         f"{classification[predicted_number]}",
         f"{0}%",

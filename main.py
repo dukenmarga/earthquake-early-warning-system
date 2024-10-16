@@ -40,10 +40,19 @@ def index():
     return "Template not found", 500
 
 
-data_buffer = []
-
+data_buffer: list[float] = []
 p_wave_start = False
 global_lock = threading.Lock()
+
+# Configuration
+sampling_rate = 100  # 100 samples per second (100 Hz)
+buffer_duration = 3  # Buffer for the last 3 seconds
+buffer_size = (
+    sampling_rate * buffer_duration
+)  # Total samples in 3 seconds (e.g., 100 * 3 = 300)
+sta_window = int(0.5 * sampling_rate)  # STA window (0.5 seconds)
+lta_window = int(2 * sampling_rate)  # LTA window (2 seconds)
+sta_lta_threshold = 3.0  # Threshold for detecting P-wave onset
 
 
 @socketio.on("seismic_wave")
@@ -63,10 +72,8 @@ def handle_seismic_wave(data: dict[str, int | float]):
                 0
             )  # Remove the oldest sample to maintain a fixed buffer size
 
-        # print(f"Received sample: {wave_sample}, Buffer size: {len(data_buffer)}")
-
+        # global_lock is used to ensure only one P-wave is detected
         global p_wave_start
-        print(p_wave_start)
         with global_lock:
             if not p_wave_start:
                 p_wave_start = p_wave_detected()
@@ -74,9 +81,6 @@ def handle_seismic_wave(data: dict[str, int | float]):
                 # quick return if P-wave is already detected (do nothing)
                 return
 
-        # while True:
-        #     if not p_wave_detected():
-        #         time.sleep(0.5)
         if p_wave_start:
             naturalfreq = int(data["building_type"])
             pga = 0
@@ -93,7 +97,7 @@ def handle_seismic_wave(data: dict[str, int | float]):
                 ),
             )
 
-            # Wait for 3 seconds before processing again
+            # Wait for 3 seconds before processing again.
             # We wait here to capture 3 seconds after the P-wave is detected
             time.sleep(3)
 
@@ -106,7 +110,7 @@ def handle_seismic_wave(data: dict[str, int | float]):
             # Predict using the loaded model
             message, probability = predict_earthquake_wave(pga, naturalfreq)
 
-            # # Send processed data back to the client
+            # Send processed data back to the client
             socketio.emit(
                 "seismic_update",
                 response(
@@ -121,15 +125,14 @@ def handle_seismic_wave(data: dict[str, int | float]):
 
             # Clear the buffer to store new incoming data
             data_buffer.clear()
-            print("Disconnected from client")
             disconnect()
-            # break
+            print("Disconnected from client")
 
-        # Process data if we have a sufficient number of samples (e.g., 100 samples for 1 second of data)
     except Exception as e:
         print(f"Error processing seismic wave data: {str(e)}")
 
 
+# Extract PGA from P-wave (within limited buffer size)
 def pga_p_wave(wave_data: NDArray[np.float64]) -> float:
     """
     Example function to extract features from seismic wave data.
@@ -142,6 +145,7 @@ def pga_p_wave(wave_data: NDArray[np.float64]) -> float:
     return pga.item()
 
 
+# Response format to send back to socket client
 def response(pga: float, pwave: dict[str, str | float], message: str) -> dict[str, Any]:
     return {
         "pga": pga,
@@ -153,20 +157,36 @@ def response(pga: float, pwave: dict[str, str | float], message: str) -> dict[st
     }
 
 
-# Configuration
-sampling_rate = 100  # 100 samples per second (100 Hz)
-buffer_duration = 3  # Buffer for the last 3 seconds
-buffer_size = (
-    sampling_rate * buffer_duration
-)  # Total samples in 3 seconds (e.g., 100 * 3 = 300)
-sta_window = int(0.5 * sampling_rate)  # STA window (0.5 seconds)
-lta_window = int(2 * sampling_rate)  # LTA window (2 seconds)
-sta_lta_threshold = 3.0  # Threshold for detecting P-wave onset
-data_buffer = []  # List to store the data
+# Check if P-wave is detected
+def p_wave_detected() -> bool:
+    # Process only if we have enough data
+    if len(data_buffer) >= buffer_size:
+        # Get the last 3 seconds of data
+        data_to_process = np.array(data_buffer[-buffer_size:])
+
+        # If STA/LTA ratio is above threshold, then P-wave is detected
+        return is_sta_lta_ratio_above_threshold(data_to_process)
+
+    return False
 
 
-# Function to calculate the STA/LTA ratio
-def calculate_sta_lta(data, sta_window, lta_window):
+# Check if STA/LTA ratio is above threshold
+def is_sta_lta_ratio_above_threshold(data: NDArray[np.float64]):
+    """
+    Detect the onset of a P-wave using the STA/LTA method.
+    """
+    sta_lta_ratio = calculate_sta_lta_ratio(data, sta_window, lta_window)
+
+    # Check if the STA/LTA ratio exceeds the threshold
+    if sta_lta_ratio >= sta_lta_threshold:
+        return True
+    return False
+
+
+# Calculate STA/LTA ratio
+def calculate_sta_lta_ratio(
+    data: NDArray[np.float64], sta_window: int, lta_window: int
+) -> float:
     """
     Calculate the STA/LTA ratio for a given data segment.
     """
@@ -174,10 +194,10 @@ def calculate_sta_lta(data, sta_window, lta_window):
         return 0  # Not enough data for LTA
 
     # Compute STA (short-term average)
-    sta = np.mean(np.abs(data[-sta_window:]))
+    sta = float(np.mean(np.abs(data[-sta_window:])))
 
     # Compute LTA (long-term average)
-    lta = np.mean(np.abs(data[-lta_window:]))
+    lta = float(np.mean(np.abs(data[-lta_window:])))
 
     # Avoid division by zero
     if lta == 0:
@@ -186,28 +206,3 @@ def calculate_sta_lta(data, sta_window, lta_window):
     # Calculate the STA/LTA ratio
     sta_lta_ratio = sta / lta
     return sta_lta_ratio
-
-
-# Function to detect the P-wave using STA/LTA
-def detect_p_wave_from_buffer(data):
-    """
-    Detect the onset of a P-wave using the STA/LTA method.
-    """
-    sta_lta_ratio = calculate_sta_lta(data, sta_window, lta_window)
-
-    # Check if the STA/LTA ratio exceeds the threshold
-    if sta_lta_ratio >= sta_lta_threshold:
-        # print(f"P-wave detected with STA/LTA ratio: {sta_lta_ratio}")
-        return True
-    return False
-
-
-# Function to process the buffer every 0.5 seconds
-def p_wave_detected():
-    # Process only if we have enough data
-    if len(data_buffer) >= buffer_size:
-        # Get the last 3 seconds of data
-        data_to_process = np.array(data_buffer[-buffer_size:])
-
-        # Call the P-wave detection function using STA/LTA
-        return detect_p_wave_from_buffer(data_to_process)
