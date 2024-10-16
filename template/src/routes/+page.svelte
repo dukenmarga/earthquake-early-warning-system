@@ -85,16 +85,15 @@
 
 		// Listen for processed data from the server
 		socket.on('seismic_update', function (data: any) {
-			// pga.innerText = 'Ground Acceleration: ' + data.pga.toFixed(2) + ' m/s2 ';
+			// content: result of ML/AI classification (prediction)
 			content = data.message;
 
+			// Include P-wave indicator as vertical line if detected
 			if (data.pwave.detected) {
 				markers = [
 					{ time: waveIndex / samplingRate, label: 'P-wave' } // in seconds
 				];
 			}
-			// console.log('Received processed data:', data);
-			console.log('Received markers:', markers);
 		});
 
 		// Create a new P5 sketch
@@ -102,14 +101,13 @@
 			let timeIncrement = 1 / 100; // Time increment for each data point (0.01 seconds, assuming 100 Hz sampling rate)
 			let currentTime = 0; // Track the current time in seconds
 
-			// Time when the P-wave marker should appear
-			let pWaveTime = 5.0; // For example, 5 seconds
-
+			// Create the P5 sketch
 			p.setup = () => {
 				waveform.textContent = '';
 				p.createCanvas(800, 200).parent(waveform);
 			};
 
+			// Draw the waveform
 			p.draw = () => {
 				p.background(220);
 
@@ -166,12 +164,11 @@
 					console.log('marker time', marker.time);
 					let markerX = p.map(
 						marker.time,
-						currentTime * (100 / 60),
-						(currentTime + maxDataPoints * timeIncrement) * (100 / 60), // 100 Hz sampling rate, but P5 runs at 60 Hz
+						currentTime * (100 / 60), // 100 Hz sampling rate, but P5 runs at 60 Hz. Hence we need to sync up the time
+						(currentTime + maxDataPoints * timeIncrement) * (100 / 60), // 100 Hz sampling rate, but P5 runs at 60 Hz. Hence we need to sync up the time
 						0,
 						p.width
 					);
-					console.log(markerX);
 					if (markerX >= 0 && markerX <= p.width) {
 						// Draw the vertical line
 						p.stroke(255, 0, 0); // Red line for marker
