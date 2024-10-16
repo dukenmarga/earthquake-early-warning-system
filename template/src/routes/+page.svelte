@@ -4,7 +4,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import Reload from 'svelte-radix/Reload.svelte';
 	import { Separator } from '$lib/components/ui/separator/index.js';
-	import { io } from 'socket.io-client';
+	import { io, Socket } from 'socket.io-client';
 	import * as Tabs from '$lib/components/ui/tabs/index.js';
 	import * as RadioGroup from '$lib/components/ui/radio-group';
 	import { onMount } from 'svelte';
@@ -13,7 +13,6 @@
 		earthquakeExample2,
 		earthquakeExample3
 	} from '$lib/earthquake-example/sample';
-	import type { Socket } from 'socket.io';
 
 	let data: number[] = [];
 	const samplingRate: number = 100; // 100 Hz means 100 samples per second
@@ -25,6 +24,10 @@
 	let example = 'Example 1';
 	let building_type = '3';
 
+	function getHost() {
+		return window.location.href;
+	}
+
 	function generateSeismicWave1(i: number) {
 		if (example == 'Example 1') {
 			return earthquakeExample1[i];
@@ -34,17 +37,24 @@
 		return earthquakeExample3[i];
 	}
 
-	let content: string | undefined = "<div style='color:grey'><strong>No earthquake detected so far!</strong>";
+	let content: string | undefined =
+		"<div style='color:grey'><strong>No earthquake detected so far!</strong>";
 	let disabled = false;
 	let buttonText = 'Simulate Earthquake';
 
 	let pga: HTMLDivElement;
-	// let socket: Socket<DefaultEventsMap, DefaultEventsMap>
-	let socket: Socket<any, any>
 
+	let socket: Socket;
+	onMount(async () => {
+		let hostname = getHost();
+		socket = io(hostname, {});
+		socket.on('connect', function () {
+			console.log('Successfully connected to the server!');
+		});
+	});
 
 	// Disconnect from server after 20 seconds
-	$: if (waveIndex == 20*samplingRate) {
+	$: if (waveIndex == 20 * samplingRate) {
 		socket.disconnect();
 		console.log('Disconnected from server');
 	}
@@ -53,15 +63,11 @@
 		content = "<div style='color:grey'><strong>No earthquake detected so far!</strong>";
 		disabled = true;
 		const p5 = (await import('p5')).default; // Dynamically import P5.js
-		socket = io('https://earthquake-warning-system-1014455894118.asia-southeast2.run.app/', {});
-		// socket = io('http://0.0.0.0:8080/', {
-		// 	reconnection: false
-		// });
 
 		// Stream data to the server every 0.01 seconds
 		let waveSample: number = 0;
 		let sendWave = setInterval(function () {
-			console.log('Sending data... Wave index:', waveIndex);
+			// console.log('Sending data... Wave index:', waveIndex);
 			waveSample = generateSeismicWave1(waveIndex);
 			socket.emit('seismic_wave', {
 				wave_sample: waveSample,
@@ -74,11 +80,21 @@
 			}
 		}, 10); // 10 milliseconds = 0.01 seconds
 
+		// Array to store markers with time and label
+		let markers: { time: number; label: string }[] = [];
+
 		// Listen for processed data from the server
-		socket.on('seismic_update', function (data) {
+		socket.on('seismic_update', function (data: any) {
 			// pga.innerText = 'Ground Acceleration: ' + data.pga.toFixed(2) + ' m/s2 ';
 			content = data.message;
-			console.log('Received processed data:', data);
+
+			if (data.pwave.detected) {
+				markers = [
+					{ time: waveIndex / samplingRate, label: 'P-wave' } // in seconds
+				];
+			}
+			// console.log('Received processed data:', data);
+			console.log('Received markers:', markers);
 		});
 
 		// Create a new P5 sketch
@@ -86,9 +102,12 @@
 			let timeIncrement = 1 / 100; // Time increment for each data point (0.01 seconds, assuming 100 Hz sampling rate)
 			let currentTime = 0; // Track the current time in seconds
 
+			// Time when the P-wave marker should appear
+			let pWaveTime = 5.0; // For example, 5 seconds
+
 			p.setup = () => {
 				waveform.textContent = '';
-				p.createCanvas(572, 200).parent(waveform);
+				p.createCanvas(800, 200).parent(waveform);
 			};
 
 			p.draw = () => {
@@ -101,7 +120,7 @@
 
 				// Calculate the width per data point
 				let pointsToShow = Math.min(data.length, maxDataPoints);
-				let xIncrement = p.width / maxDataPoints;
+				let xIncrement = p.width / maxDataPoints; // 800 / 1000 = 0.8 px/data point
 
 				for (let i = 0; i < pointsToShow; i++) {
 					// Calculate x based on whether we are still filling or scrolling
@@ -142,6 +161,29 @@
 				p.text('ground motion in m/s²', 0, 0);
 				p.pop();
 
+				// Draw markers (vertical lines and labels)
+				markers.forEach((marker) => {
+					console.log('marker time', marker.time);
+					let markerX = p.map(
+						marker.time,
+						currentTime * (100 / 60),
+						(currentTime + maxDataPoints * timeIncrement) * (100 / 60), // 100 Hz sampling rate, but P5 runs at 60 Hz
+						0,
+						p.width
+					);
+					console.log(markerX);
+					if (markerX >= 0 && markerX <= p.width) {
+						// Draw the vertical line
+						p.stroke(255, 0, 0); // Red line for marker
+						p.line(markerX, 0, markerX, p.height);
+
+						// Draw the label below the line
+						p.textAlign(p.CENTER, p.TOP);
+						p.fill(0);
+						p.text(marker.label, markerX, p.height - 20);
+					}
+				});
+
 				// Generate new data and update the array
 				data.push(waveSample);
 
@@ -155,7 +197,6 @@
 
 		disabled = false;
 	}
-	onMount(async () => {});
 </script>
 
 <svelte:head>
@@ -247,8 +288,8 @@
 										<br />
 										<div class="text-muted-foreground text-sm">
 											Note: Please refresh to try another simulation! If the simulation is not
-											working, please reload the page, since it might encounter a problem
-											due to serverless computing environment.
+											working, please reload the page, since it might encounter a problem due to
+											serverless computing environment.
 										</div>
 									</div>
 								</Card.Footer>

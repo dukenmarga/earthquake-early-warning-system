@@ -1,5 +1,7 @@
 import os
+import threading
 import time
+from typing import Any
 
 import numpy as np
 from flask import Flask, current_app, send_from_directory
@@ -40,6 +42,9 @@ def index():
 
 data_buffer = []
 
+p_wave_start = False
+global_lock = threading.Lock()
+
 
 @socketio.on("seismic_wave")
 def handle_seismic_wave(data: dict[str, int | float]):
@@ -60,36 +65,65 @@ def handle_seismic_wave(data: dict[str, int | float]):
 
         # print(f"Received sample: {wave_sample}, Buffer size: {len(data_buffer)}")
 
-        while True:
-            if not p_wave_detected():
-                time.sleep(0.5)
+        global p_wave_start
+        print(p_wave_start)
+        with global_lock:
+            if not p_wave_start:
+                p_wave_start = p_wave_detected()
             else:
-                naturalfreq = int(data["building_type"])
-                pga = 0
-                message = "<div style='color:blue'><strong>Earthquake Detected. Analysis in progress...</strong></div>"
-                socketio.emit("seismic_update", response(pga, message))
+                # quick return if P-wave is already detected (do nothing)
+                return
 
-                # Wait for 3 seconds before processing again
-                # We wait here to capture 3 seconds after the P-wave is detected
-                time.sleep(3)
+        # while True:
+        #     if not p_wave_detected():
+        #         time.sleep(0.5)
+        if p_wave_start:
+            naturalfreq = int(data["building_type"])
+            pga = 0
+            message = "<div style='color:blue'><strong>Earthquake Detected. Analysis in progress...</strong></div>"
+            socketio.emit(
+                "seismic_update",
+                response(
+                    pga,
+                    {
+                        "detected": True,
+                        "seconds": 0,
+                    },
+                    message,
+                ),
+            )
 
-                # Convert the buffer into a NumPy array for processing
-                wave_data = np.array(data_buffer)
+            # Wait for 3 seconds before processing again
+            # We wait here to capture 3 seconds after the P-wave is detected
+            time.sleep(3)
 
-                # Process the wave data with a custom function (e.g., feature extraction)
-                pga = pga_p_wave(wave_data)
+            # Convert the buffer into a NumPy array for processing
+            wave_data = np.array(data_buffer)
 
-                # Predict using the loaded model
-                message, probability = predict_earthquake_wave(pga, naturalfreq)
+            # Process the wave data with a custom function (e.g., feature extraction)
+            pga = pga_p_wave(wave_data)
 
-                # # Send processed data back to the client
-                socketio.emit("seismic_update", response(pga, message))
+            # Predict using the loaded model
+            message, probability = predict_earthquake_wave(pga, naturalfreq)
 
-                # Clear the buffer to store new incoming data
-                data_buffer.clear()
-                print("Disconnected from client")
-                disconnect()
-                break
+            # # Send processed data back to the client
+            socketio.emit(
+                "seismic_update",
+                response(
+                    pga,
+                    {
+                        "detected": False,
+                        "seconds": 0,
+                    },
+                    message,
+                ),
+            )
+
+            # Clear the buffer to store new incoming data
+            data_buffer.clear()
+            print("Disconnected from client")
+            disconnect()
+            # break
 
         # Process data if we have a sufficient number of samples (e.g., 100 samples for 1 second of data)
     except Exception as e:
@@ -108,8 +142,15 @@ def pga_p_wave(wave_data: NDArray[np.float64]) -> float:
     return pga.item()
 
 
-def response(pga: float, message: str) -> dict[str, str | float]:
-    return {"pga": pga, "message": message}
+def response(pga: float, pwave: dict[str, str | float], message: str) -> dict[str, Any]:
+    return {
+        "pga": pga,
+        "pwave": {
+            "detected": pwave["detected"],
+            "seconds": pwave["seconds"],
+        },
+        "message": message,
+    }
 
 
 # Configuration
