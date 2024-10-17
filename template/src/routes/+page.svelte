@@ -51,7 +51,6 @@
 		});
 
 		const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-			event.preventDefault();
 			socket.disconnect();
 			console.log('Disconnected from server');
 		};

@@ -12,7 +12,7 @@ from numpy.typing import NDArray
 
 from prediction import predict_earthquake_wave
 
-Payload.max_decode_packets = 5000
+Payload.max_decode_packets = 50
 
 app = Flask(__name__, static_folder="template/build")
 socketio = SocketIO(app)
