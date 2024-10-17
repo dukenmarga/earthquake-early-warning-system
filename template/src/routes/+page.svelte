@@ -87,6 +87,9 @@
 			if (waveIndex >= maxWaveformPoints) {
 				clearInterval(sendWave);
 			}
+			if (waveIndex % 500 == 0) {
+				console.log(waveIndex);
+			}
 		}, 10); // 10 milliseconds = 0.01 seconds
 
 		// Array to store markers with time and label
@@ -94,6 +97,7 @@
 
 		// Listen for processed data from the server
 		socket.on('seismic_update', function (data: any) {
+			console.log('Received data from server: ', data);
 			// content: result of ML/AI classification (prediction)
 			if (data.message !== '') {
 				content = data.message;
