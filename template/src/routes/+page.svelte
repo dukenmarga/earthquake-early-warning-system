@@ -42,15 +42,25 @@
 	let disabled = false;
 	let buttonText = 'Simulate Earthquake';
 
-	let pga: HTMLDivElement;
-
 	let socket: Socket;
-	onMount(async () => {
+	onMount(() => {
 		let hostname = getHost();
 		socket = io(hostname, {});
 		socket.on('connect', function () {
 			console.log('Successfully connected to the server!');
 		});
+
+		const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+			event.preventDefault();
+			socket.disconnect();
+			console.log('Disconnected from server');
+		};
+
+		window.addEventListener('beforeunload', handleBeforeUnload);
+
+		return () => {
+			window.removeEventListener('beforeunload', handleBeforeUnload);
+		};
 	});
 
 	// Disconnect from server after 20 seconds
@@ -229,7 +239,6 @@
 									>
 								</Card.Header>
 								<Card.Content class="space-y-2">
-									<div id="pga" bind:this={pga}></div>
 									<div id="message">{@html content}</div>
 									<div class="space-y-1">
 										<Label for="name">Wave</Label>
