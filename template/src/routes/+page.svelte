@@ -90,9 +90,12 @@
 
 			// Include P-wave indicator as vertical line if detected
 			if (data.pwave.detected) {
-				markers = [
-					{ time: waveIndex / samplingRate, label: 'P-wave' } // in seconds
-				];
+				markers = markers.concat({ time: waveIndex / samplingRate, label: 'P-wave' }); // in seconds
+			}
+
+			// Include S-wave indicator as vertical line if detected
+			if (data.swave.detected) {
+				markers = markers.concat({ time: waveIndex / samplingRate, label: 'S-wave' }); // in seconds
 			}
 		});
 
@@ -161,7 +164,6 @@
 
 				// Draw markers (vertical lines and labels)
 				markers.forEach((marker) => {
-					console.log('marker time', marker.time);
 					let markerX = p.map(
 						marker.time,
 						currentTime * (100 / 60), // 100 Hz sampling rate, but P5 runs at 60 Hz. Hence we need to sync up the time

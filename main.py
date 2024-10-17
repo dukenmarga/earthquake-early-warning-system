@@ -4,11 +4,14 @@ import time
 from typing import Any
 
 import numpy as np
+from engineio.payload import Payload
 from flask import Flask, current_app, send_from_directory
-from flask_socketio import SocketIO, disconnect
+from flask_socketio import SocketIO
 from numpy.typing import NDArray
 
 from prediction import predict_earthquake_wave
+
+Payload.max_decode_packets = 5000
 
 app = Flask(__name__, static_folder="template/build")
 socketio = SocketIO(app)
@@ -42,7 +45,11 @@ def index():
 
 data_buffer: list[float] = []
 p_wave_start = False
-global_lock = threading.Lock()
+s_wave_start = False
+p_wave_run_once = False
+s_wave_run_once = False
+global_p_wave_lock = threading.Lock()
+global_s_wave_lock = threading.Lock()
 
 # Configuration
 sampling_rate = 100  # 100 samples per second (100 Hz)
@@ -53,6 +60,9 @@ buffer_size = (
 sta_window = int(0.5 * sampling_rate)  # STA window (0.5 seconds)
 lta_window = int(2 * sampling_rate)  # LTA window (2 seconds)
 sta_lta_threshold = 3.0  # Threshold for detecting P-wave onset
+
+p_wave_amplitude: float = 0
+s_wave_amplitude: float = 0
 
 
 @socketio.on("seismic_wave")
@@ -74,59 +84,115 @@ def handle_seismic_wave(data: dict[str, int | float]):
 
         # global_lock is used to ensure only one P-wave is detected
         global p_wave_start
-        with global_lock:
+        global s_wave_start
+        with global_p_wave_lock:
             if not p_wave_start:
                 p_wave_start = p_wave_detected()
+            elif not s_wave_start:
+                pass
             else:
                 # quick return if P-wave is already detected (do nothing)
                 return
 
         if p_wave_start:
-            naturalfreq = int(data["building_type"])
-            pga = 0
-            message = "<div style='color:blue'><strong>Earthquake Detected. Analysis in progress...</strong></div>"
-            socketio.emit(
-                "seismic_update",
-                response(
-                    pga,
-                    {
-                        "detected": True,
-                        "seconds": 0,
-                    },
-                    message,
-                ),
-            )
+            global p_wave_run_once
+            if not p_wave_run_once:
+                p_wave_run_once = True
+                naturalfreq = int(data["building_type"])
+                pga = 0
+                message = "<div style='color:blue'><strong>Earthquake Detected. Analysis in progress...</strong></div>"
+                socketio.emit(
+                    "seismic_update",
+                    response(
+                        {
+                            "detected": True,
+                            "seconds": 0,
+                            "message": "P-wave!",
+                            "pga": pga,
+                        },
+                        {
+                            "detected": False,
+                            "seconds": 0,
+                            "message": "",
+                            "pga": 0,
+                        },
+                        message,
+                    ),
+                )
 
-            # Wait for 3 seconds before processing again.
-            # We wait here to capture 3 seconds after the P-wave is detected
-            time.sleep(3)
+                # Wait for 3 seconds before processing again.
+                # We wait here to capture 3 seconds after the P-wave is detected
+                time.sleep(3)
 
-            # Convert the buffer into a NumPy array for processing
-            wave_data = np.array(data_buffer)
+                # Convert the buffer into a NumPy array for processing
+                wave_data = np.array(data_buffer)
 
-            # Process the wave data with a custom function (e.g., feature extraction)
-            pga = pga_p_wave(wave_data)
+                # PGA from P-wave (3 seconds)
+                pga = pga_p_wave(wave_data)
 
-            # Predict using the loaded model
-            message, probability = predict_earthquake_wave(pga, naturalfreq)
+                global p_wave_amplitude
+                if p_wave_amplitude == 0:
+                    p_wave_amplitude = mean_amplitude(wave_data)
 
-            # Send processed data back to the client
-            socketio.emit(
-                "seismic_update",
-                response(
-                    pga,
-                    {
-                        "detected": False,
-                        "seconds": 0,
-                    },
-                    message,
-                ),
-            )
+                # Predict using the loaded model
+                message, probability = predict_earthquake_wave(pga, naturalfreq)
 
-            # Clear the buffer to store new incoming data
-            data_buffer.clear()
-            disconnect()
-            print("Disconnected from client")
+                # Send processed data back to the client
+                socketio.emit(
+                    "seismic_update",
+                    response(
+                        {
+                            "detected": False,
+                            "seconds": 0,
+                            "message": "",
+                            "pga": pga,
+                        },
+                        {
+                            "detected": False,
+                            "seconds": 0,
+                            "message": "",
+                            "pga": 0,
+                        },
+                        message,
+                    ),
+                )
+
+                # Clear the buffer to store new incoming data
+                # data_buffer.clear()
+                # disconnect()
+                # print("Disconnected from client")
+                # return
+
+        with global_s_wave_lock:
+            if not s_wave_start:
+                s_wave_start = s_wave_detected(np.array(data_buffer))
+            else:
+                # quick return if S-wave is already detected (do nothing)
+                return
+
+        global s_wave_run_once
+        if s_wave_start and p_wave_run_once:
+            if not s_wave_run_once:
+                message = ""
+                socketio.emit(
+                    "seismic_update",
+                    response(
+                        {
+                            "detected": False,
+                            "seconds": 0,
+                            "message": "",
+                            "pga": 0,
+                        },
+                        {
+                            "detected": True,
+                            "seconds": s_wave_start,
+                            "message": "S-wave",
+                            "pga": s_wave_amplitude,
+                        },
+                        message,
+                    ),
+                )
+                s_wave_run_once = True
 
     except Exception as e:
         print(f"Error processing seismic wave data: {str(e)}")
@@ -146,12 +212,23 @@ def pga_p_wave(wave_data: NDArray[np.float64]) -> float:
 
 
 # Response format to send back to socket client
-def response(pga: float, pwave: dict[str, str | float], message: str) -> dict[str, Any]:
+def response(
+    pwave: dict[str, str | float],
+    swave: dict[str, str | float],
+    message: str,
+) -> dict[str, Any]:
     return {
-        "pga": pga,
         "pwave": {
             "detected": pwave["detected"],
             "seconds": pwave["seconds"],
+            "pga": pwave["pga"],
+            "message": pwave["message"],
+        },
+        "swave": {
+            "detected": swave["detected"],
+            "seconds": swave["seconds"],
+            "pga": pwave["pga"],
+            "message": swave["message"],
         },
         "message": message,
     }
@@ -206,3 +283,28 @@ def calculate_sta_lta_ratio(
     # Calculate the STA/LTA ratio
     sta_lta_ratio = sta / lta
     return sta_lta_ratio
+
+
+def s_wave_detected(data: NDArray[np.float64], threshold_multiplier: int = 4) -> bool:
+    global p_wave_amplitude
+    global s_wave_amplitude
+
+    # Return if p_wave_amplitude is zero
+    if p_wave_amplitude < 0.0001:
+        return False
+
+    avg_amplitude = float(np.max(np.abs(data[-100:-50])))
+    max_amplitude = float(np.max(np.abs(data[-50:])))
+
+    # Look for where amplitude exceeds the threshold (likely S-wave)
+    for _, datapoint in enumerate(data):
+        s_wave_amplitude = np.abs(datapoint)
+        if max_amplitude > threshold_multiplier * avg_amplitude:
+            return True
+
+    return False
+
+
+def mean_amplitude(data_wave: NDArray[np.float64]) -> float:
+    # Calculate mean amplitude of P-wave region (before S-wave)
+    return float(np.mean(np.abs(data_wave)))
