@@ -5,14 +5,13 @@ import time
 from typing import Any
 
 import numpy as np
-from engineio.payload import Payload
 from flask import Flask, current_app, send_from_directory
 from flask_socketio import SocketIO
 from numpy.typing import NDArray
 
 from prediction import predict_earthquake_wave
 
-Payload.max_decode_packets = 50
+# Payload.max_decode_packets = 50
 
 app = Flask(__name__, static_folder="template/build")
 socketio = SocketIO(app)
