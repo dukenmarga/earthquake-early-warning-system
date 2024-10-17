@@ -1,4 +1,5 @@
 import os
+import random
 import threading
 import time
 from typing import Any
@@ -141,6 +142,9 @@ def handle_seismic_wave(data: dict[str, int | float]):
                     ),
                 )
 
+        if random.randint(0, 20) != 0:
+            return
+
         with global_s_wave_lock:
             if not s_wave_start:
                 s_wave_start = s_wave_detected(np.array(data_buffer))
@@ -151,6 +155,7 @@ def handle_seismic_wave(data: dict[str, int | float]):
         global s_wave_run_once
         if s_wave_start and p_wave_run_once:
             if not s_wave_run_once:
+                s_wave_run_once = True
                 message = ""
                 socketio.emit(
                     "seismic_update",
@@ -162,7 +167,6 @@ def handle_seismic_wave(data: dict[str, int | float]):
                         message,
                     ),
                 )
-                s_wave_run_once = True
 
     except Exception as e:
         print(f"Error processing seismic wave data: {str(e)}")
