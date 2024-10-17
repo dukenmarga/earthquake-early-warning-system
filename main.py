@@ -105,16 +105,8 @@ def handle_seismic_wave(data: dict[str, int | float]):
                     "seismic_update",
                     response(
                         {
-                            "detected": True,
-                            "seconds": 0,
-                            "message": "P-wave!",
-                            "pga": pga,
-                        },
-                        {
-                            "detected": False,
-                            "seconds": 0,
-                            "message": "",
-                            "pga": 0,
+                            "sent": True,
+                            "message": "P-wave",
                         },
                         message,
                     ),
@@ -142,26 +134,12 @@ def handle_seismic_wave(data: dict[str, int | float]):
                     "seismic_update",
                     response(
                         {
-                            "detected": False,
-                            "seconds": 0,
-                            "message": "",
-                            "pga": pga,
-                        },
-                        {
-                            "detected": False,
-                            "seconds": 0,
-                            "message": "",
-                            "pga": 0,
+                            "sent": True,
+                            "message": "Inference",
                         },
                         message,
                     ),
                 )
-
-                # Clear the buffer to store new incoming data
-                # data_buffer.clear()
-                # disconnect()
-                # print("Disconnected from client")
-                # return
 
         with global_s_wave_lock:
             if not s_wave_start:
@@ -178,16 +156,8 @@ def handle_seismic_wave(data: dict[str, int | float]):
                     "seismic_update",
                     response(
                         {
-                            "detected": False,
-                            "seconds": 0,
-                            "message": "",
-                            "pga": 0,
-                        },
-                        {
-                            "detected": True,
-                            "seconds": s_wave_start,
+                            "sent": True,
                             "message": "S-wave",
-                            "pga": s_wave_amplitude,
                         },
                         message,
                     ),
@@ -213,22 +183,13 @@ def pga_p_wave(wave_data: NDArray[np.float64]) -> float:
 
 # Response format to send back to socket client
 def response(
-    pwave: dict[str, str | float],
-    swave: dict[str, str | float],
+    signal: dict[str, str | float],
     message: str,
 ) -> dict[str, Any]:
     return {
-        "pwave": {
-            "detected": pwave["detected"],
-            "seconds": pwave["seconds"],
-            "pga": pwave["pga"],
-            "message": pwave["message"],
-        },
-        "swave": {
-            "detected": swave["detected"],
-            "seconds": swave["seconds"],
-            "pga": pwave["pga"],
-            "message": swave["message"],
+        "signal": {
+            "sent": signal["sent"],
+            "message": signal["message"],
         },
         "message": message,
     }

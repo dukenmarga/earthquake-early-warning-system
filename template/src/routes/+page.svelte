@@ -86,16 +86,13 @@
 		// Listen for processed data from the server
 		socket.on('seismic_update', function (data: any) {
 			// content: result of ML/AI classification (prediction)
-			content = data.message;
-
-			// Include P-wave indicator as vertical line if detected
-			if (data.pwave.detected) {
-				markers = markers.concat({ time: waveIndex / samplingRate, label: 'P-wave' }); // in seconds
+			if (data.message !== '') {
+				content = data.message;
 			}
 
-			// Include S-wave indicator as vertical line if detected
-			if (data.swave.detected) {
-				markers = markers.concat({ time: waveIndex / samplingRate, label: 'S-wave' }); // in seconds
+			// Include P-wave, Inference, and S-wave indicator as vertical line if detected
+			if (data.signal.sent) {
+				markers = markers.concat({ time: waveIndex / samplingRate, label: data.signal.message }); // in seconds
 			}
 		});
 
