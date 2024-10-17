@@ -67,7 +67,6 @@
 		// Stream data to the server every 0.01 seconds
 		let waveSample: number = 0;
 		let sendWave = setInterval(function () {
-			// console.log('Sending data... Wave index:', waveIndex);
 			waveSample = generateSeismicWave1(waveIndex);
 			socket.emit('seismic_wave', {
 				wave_sample: waveSample,
@@ -203,7 +202,7 @@
 	<h1 class="text-2xl font-semibold">Earthquake Early Warning System</h1>
 </div>
 
-<div class="mx-auto grid w-full max-w-2xl items-start gap-6 md:grid-cols-1 lg:grid-cols-1">
+<div class="mx-auto grid w-full max-w-4xl items-start gap-6 md:grid-cols-1 lg:grid-cols-1">
 	<div class="grid gap-6">
 		<Card.Root>
 			<Card.Header>
