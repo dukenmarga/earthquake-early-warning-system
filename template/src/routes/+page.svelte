@@ -246,6 +246,13 @@
 									>
 								</Card.Header>
 								<Card.Content class="space-y-2">
+									<div class="flex items-center justify-center space-y-1">
+										<img
+											class="mx-auto"
+											src="/image740-5.png"
+											alt="house-sensor-earthquake-ilustration"
+										/>
+									</div>
 									<div id="message">{@html content}</div>
 									<div class="space-y-1">
 										<Label for="name">Wave</Label>
@@ -322,6 +329,16 @@
 										Dataset (STEAD): A Global Data Set of Seismic Signals for AI, IEEE Access,
 										doi:10.1109/ACCESS.2019.2947848
 									</a>
+									<Separator class="my-4" />
+
+									<Label for="name">Tehcnical Note How It Works</Label><br />
+									<div>
+										The machine learing model will analyse the 3-seconds of earthquake P-wave and
+										structural properties. P-wave is not damaging since it has low energy. The
+										inference will predict the impact before the S-wave comes (more damaging than
+										P-wave).
+									</div>
+
 									<Separator class="my-4" />
 
 									<Label for="name">Icon</Label><br />

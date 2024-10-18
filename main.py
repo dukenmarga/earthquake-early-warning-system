@@ -39,6 +39,13 @@ def icon():
     return "Resource not found", 500
 
 
+@app.route("/image740-5.png")
+def image():
+    if app.static_folder:
+        return current_app.send_static_file("image740-5.png")
+    return "Resource not found", 500
+
+
 @app.route("/")
 def index():
     session["connection_id"] = str(uuid.uuid4())
