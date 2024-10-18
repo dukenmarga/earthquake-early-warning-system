@@ -5,16 +5,17 @@ import time
 from typing import Any
 
 import numpy as np
+from engineio.payload import Payload
 from flask import Flask, current_app, send_from_directory
 from flask_socketio import SocketIO
 from numpy.typing import NDArray
 
 from prediction import predict_earthquake_wave
 
-# Payload.max_decode_packets = 50
+Payload.max_decode_packets = 500
 
 app = Flask(__name__, static_folder="template/build")
-socketio = SocketIO(app)
+socketio = SocketIO(app, ping_timeout=40)
 
 if __name__ == "__main__":
     socketio.run(
@@ -141,7 +142,7 @@ def handle_seismic_wave(data: dict[str, int | float]):
                     ),
                 )
 
-        if random.randint(0, 20) != 0:
+        if random.randint(0, 50) != 0:
             return
 
         with global_s_wave_lock:

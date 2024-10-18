@@ -45,9 +45,18 @@
 	let socket: Socket;
 	onMount(() => {
 		let hostname = getHost();
-		socket = io(hostname, {});
+		socket = io(hostname, {
+			transports: ['websocket']
+		});
 		socket.on('connect', function () {
-			console.log('Successfully connected to the server!');
+			console.log('Connect: Successfully connected to the server!');
+		});
+		socket.on('disconnect', function (reason) {
+			console.log('Disconnect: ', reason);
+		});
+		socket.on('connect_error', (err) => {
+			// the reason of the error, for example "xhr poll error"
+			console.log('Error connect: ', err.message);
 		});
 
 		const handleBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -63,9 +72,8 @@
 	});
 
 	// Disconnect from server after 20 seconds
-	$: if (waveIndex == 20 * samplingRate) {
+	$: if (waveIndex == 40 * samplingRate) {
 		socket.disconnect();
-		console.log('Disconnected from server');
 	}
 
 	async function analyseWave() {
@@ -86,9 +94,6 @@
 			if (waveIndex >= maxWaveformPoints) {
 				clearInterval(sendWave);
 			}
-			if (waveIndex % 500 == 0) {
-				console.log(waveIndex);
-			}
 		}, 10); // 10 milliseconds = 0.01 seconds
 
 		// Array to store markers with time and label
@@ -96,7 +101,6 @@
 
 		// Listen for processed data from the server
 		socket.on('seismic_update', function (data: any) {
-			console.log('Received data from server: ', data);
 			// content: result of ML/AI classification (prediction)
 			if (data.message !== '') {
 				content = data.message;
