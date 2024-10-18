@@ -2,11 +2,12 @@ import os
 import random
 import threading
 import time
+import uuid
 from typing import Any
 
 import numpy as np
 from engineio.payload import Payload
-from flask import Flask, current_app, send_from_directory
+from flask import Flask, current_app, send_from_directory, session
 from flask_socketio import SocketIO
 from numpy.typing import NDArray
 
@@ -15,6 +16,7 @@ from prediction import predict_earthquake_wave
 Payload.max_decode_packets = 500
 
 app = Flask(__name__, static_folder="template/build")
+app.secret_key = "1112e8efe6124199aec2"
 socketio = SocketIO(app, ping_timeout=40)
 
 if __name__ == "__main__":
@@ -39,18 +41,13 @@ def icon():
 
 @app.route("/")
 def index():
+    session["connection_id"] = str(uuid.uuid4())
     if app.static_folder:
         return current_app.send_static_file("index.html")
     return "Template not found", 500
 
 
-data_buffer: list[float] = []
-p_wave_start = False
-s_wave_start = False
-p_wave_run_once = False
-s_wave_run_once = False
-global_p_wave_lock = threading.Lock()
-global_s_wave_lock = threading.Lock()
+connections: dict[str, Any] = {}
 
 # Configuration
 sampling_rate = 100  # 100 samples per second (100 Hz)
@@ -62,8 +59,32 @@ sta_window = int(0.5 * sampling_rate)  # STA window (0.5 seconds)
 lta_window = int(2 * sampling_rate)  # LTA window (2 seconds)
 sta_lta_threshold = 3.0  # Threshold for detecting P-wave onset
 
-p_wave_amplitude: float = 0
-s_wave_amplitude: float = 0
+
+@socketio.on("connect")
+def handle_connect():
+    # Create a new entry for the connection
+    connection_id = str(session.get("connection_id"))
+    connections[connection_id] = {
+        "data_buffer": [],
+        "p_wave_start": False,
+        "s_wave_start": False,
+        "p_wave_run_once": False,
+        "s_wave_run_once": False,
+        "global_p_wave_lock": threading.Lock(),
+        "global_s_wave_lock": threading.Lock(),
+        "p_wave_amplitude": 0,
+        "s_wave_amplitude": 0,
+    }
+    print(f"New connection: {connection_id}")
+
+
+@socketio.on("disconnect")
+def handle_disconnect():
+    connection_id = str(session.get("connection_id"))
+    if connection_id in connections:
+        # Clean up the data for this connection
+        del connections[connection_id]
+        print(f"Connection {connection_id} closed and data cleared.")
 
 
 @socketio.on("seismic_wave")
@@ -72,33 +93,32 @@ def handle_seismic_wave(data: dict[str, int | float]):
     Handle seismic wave data sent from the frontend.
     Expected data format: {'wave_sample': value, 'sampling_rate': 100}
     """
+    connection_id = str(session.get("connection_id"))
+
     try:
         # Extract data from the incoming message
         wave_sample = data["wave_sample"]
-        data_buffer.append(wave_sample)
+        connections[connection_id]["data_buffer"].append(wave_sample)
 
         # Keep only the latest 'buffer_size' samples in the buffer
-        if len(data_buffer) > buffer_size:
-            data_buffer.pop(
+        if len(connections[connection_id]["data_buffer"]) > buffer_size:
+            connections[connection_id]["data_buffer"].pop(
                 0
             )  # Remove the oldest sample to maintain a fixed buffer size
 
         # global_lock is used to ensure only one P-wave is detected
-        global p_wave_start
-        global s_wave_start
-        with global_p_wave_lock:
-            if not p_wave_start:
-                p_wave_start = p_wave_detected()
-            elif not s_wave_start:
+        with connections[connection_id]["global_p_wave_lock"]:
+            if not connections[connection_id]["p_wave_start"]:
+                connections[connection_id]["p_wave_start"] = p_wave_detected()
+            elif not connections[connection_id]["s_wave_start"]:
                 pass
             else:
                 # quick return if P-wave is already detected (do nothing)
                 return
 
-        if p_wave_start:
-            global p_wave_run_once
-            if not p_wave_run_once:
-                p_wave_run_once = True
+        if connections[connection_id]["p_wave_start"]:
+            if not connections[connection_id]["p_wave_run_once"]:
+                connections[connection_id]["p_wave_run_once"] = True
                 naturalfreq = int(data["building_type"])
                 pga = 0
                 message = "<div style='color:blue'><strong>Earthquake Detected. Analysis in progress...</strong></div>"
@@ -118,14 +138,15 @@ def handle_seismic_wave(data: dict[str, int | float]):
                 time.sleep(3)
 
                 # Convert the buffer into a NumPy array for processing
-                wave_data = np.array(data_buffer)
+                wave_data = np.array(connections[connection_id]["data_buffer"])
 
                 # PGA from P-wave (3 seconds)
                 pga = pga_p_wave(wave_data)
 
-                global p_wave_amplitude
-                if p_wave_amplitude == 0:
-                    p_wave_amplitude = mean_amplitude(wave_data)
+                if connections[connection_id]["p_wave_amplitude"] == 0:
+                    connections[connection_id]["p_wave_amplitude"] = mean_amplitude(
+                        wave_data
+                    )
 
                 # Predict using the loaded model
                 message, probability = predict_earthquake_wave(pga, naturalfreq)
@@ -142,20 +163,24 @@ def handle_seismic_wave(data: dict[str, int | float]):
                     ),
                 )
 
-        if random.randint(0, 50) != 0:
+        if random.randint(0, 5) != 0:
             return
 
-        with global_s_wave_lock:
-            if not s_wave_start:
-                s_wave_start = s_wave_detected(np.array(data_buffer))
+        with connections[connection_id]["global_s_wave_lock"]:
+            if not connections[connection_id]["s_wave_start"]:
+                connections[connection_id]["s_wave_start"] = s_wave_detected(
+                    np.array(connections[connection_id]["data_buffer"])
+                )
             else:
                 # quick return if S-wave is already detected (do nothing)
                 return
 
-        global s_wave_run_once
-        if s_wave_start and p_wave_run_once:
-            if not s_wave_run_once:
-                s_wave_run_once = True
+        if (
+            connections[connection_id]["s_wave_start"]
+            and connections[connection_id]["p_wave_run_once"]
+        ):
+            if not connections[connection_id]["s_wave_run_once"]:
+                connections[connection_id]["s_wave_run_once"] = True
                 message = ""
                 socketio.emit(
                     "seismic_update",
@@ -201,10 +226,14 @@ def response(
 
 # Check if P-wave is detected
 def p_wave_detected() -> bool:
+    connection_id = str(session.get("connection_id"))
+
     # Process only if we have enough data
-    if len(data_buffer) >= buffer_size:
+    if len(connections[connection_id]["data_buffer"]) >= buffer_size:
         # Get the last 3 seconds of data
-        data_to_process = np.array(data_buffer[-buffer_size:])
+        data_to_process = np.array(
+            connections[connection_id]["data_buffer"][-buffer_size:]
+        )
 
         # If STA/LTA ratio is above threshold, then P-wave is detected
         return is_sta_lta_ratio_above_threshold(data_to_process)
@@ -251,11 +280,10 @@ def calculate_sta_lta_ratio(
 
 
 def s_wave_detected(data: NDArray[np.float64], threshold_multiplier: int = 4) -> bool:
-    global p_wave_amplitude
-    global s_wave_amplitude
+    connection_id = str(session.get("connection_id"))
 
     # Return if p_wave_amplitude is zero
-    if p_wave_amplitude < 0.0001:
+    if connections[connection_id]["p_wave_amplitude"] < 0.0001:
         return False
 
     avg_amplitude = float(np.max(np.abs(data[-100:-50])))
@@ -263,7 +291,7 @@ def s_wave_detected(data: NDArray[np.float64], threshold_multiplier: int = 4) ->
 
     # Look for where amplitude exceeds the threshold (likely S-wave)
     for _, datapoint in enumerate(data):
-        s_wave_amplitude = np.abs(datapoint)
+        connections[connection_id]["s_wave_amplitude"] = np.abs(datapoint)
         if max_amplitude > threshold_multiplier * avg_amplitude:
             return True
 
